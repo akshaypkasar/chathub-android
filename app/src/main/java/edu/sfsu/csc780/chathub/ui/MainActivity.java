@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package edu.sfsu.csc780.chathub;
+package edu.sfsu.csc780.chathub.ui;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -32,12 +32,12 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.firebase.ui.database.FirebaseRecyclerAdapter;
 import com.google.android.gms.auth.api.Auth;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -45,22 +45,12 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 
 import de.hdodenhof.circleimageview.CircleImageView;
+import edu.sfsu.csc780.chathub.R;
+import edu.sfsu.csc780.chathub.model.ChatMessage;
 
 public class MainActivity extends AppCompatActivity
-        implements GoogleApiClient.OnConnectionFailedListener {
-
-    public static class MessageViewHolder extends RecyclerView.ViewHolder {
-        public TextView messageTextView;
-        public TextView messengerTextView;
-        public CircleImageView messengerImageView;
-
-        public MessageViewHolder(View v) {
-            super(v);
-            messageTextView = (TextView) itemView.findViewById(R.id.messageTextView);
-            messengerTextView = (TextView) itemView.findViewById(R.id.messengerTextView);
-            messengerImageView = (CircleImageView) itemView.findViewById(R.id.messengerImageView);
-        }
-    }
+        implements GoogleApiClient.OnConnectionFailedListener,
+        MessageUtil.MessageLoadListener {
 
     private static final String TAG = "MainActivity";
     public static final String MESSAGES_CHILD = "messages";
@@ -81,6 +71,10 @@ public class MainActivity extends AppCompatActivity
     // Firebase instance variables
     private FirebaseAuth mAuth;
     private FirebaseUser mUser;
+
+    private FirebaseRecyclerAdapter<ChatMessage, MessageUtil.MessageViewHolder>
+            mFirebaseAdapter;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -143,8 +137,23 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void onClick(View view) {
                 // Send messages on click.
+                ChatMessage chatMessage = new
+                        ChatMessage(mMessageEditText.getText().toString(),
+                        mUsername,
+                        mPhotoUrl);
+                MessageUtil.send(chatMessage);
+                mMessageEditText.setText("");
+                int lastPosition = mMessageRecyclerView.getAdapter().getItemCount();
+                mMessageRecyclerView.scrollToPosition(lastPosition);
             }
         });
+
+        mFirebaseAdapter = MessageUtil.getFirebaseAdapter(this,
+                this,  /* MessageLoadListener */
+                mLinearLayoutManager,
+                mMessageRecyclerView);
+
+        mMessageRecyclerView.setAdapter(mFirebaseAdapter);
     }
 
     @Override
@@ -196,5 +205,10 @@ public class MainActivity extends AppCompatActivity
         // be available.
         Log.d(TAG, "onConnectionFailed:" + connectionResult);
         Toast.makeText(this, "Google Play Services error.", Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public void onLoadComplete() {
+        mProgressBar.setVisibility(ProgressBar.INVISIBLE);
     }
 }

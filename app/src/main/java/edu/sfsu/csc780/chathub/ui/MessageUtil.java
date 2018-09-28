@@ -2,21 +2,31 @@ package edu.sfsu.csc780.chathub.ui;
 
 import android.app.Activity;
 import android.graphics.Bitmap;
+import android.net.Uri;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.util.Log;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.target.SimpleTarget;
 import com.bumptech.glide.request.transition.Transition;
 import com.firebase.ui.database.FirebaseRecyclerAdapter;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
+
+import java.util.Calendar;
 
 import de.hdodenhof.circleimageview.CircleImageView;
 import edu.sfsu.csc780.chathub.model.ChatMessage;
@@ -29,6 +39,8 @@ public class MessageUtil {
             FirebaseDatabase.getInstance().getReference();
     private static MessageLoadListener sAdapterListener;
     private static FirebaseAuth sFirebaseAuth;
+    private static FirebaseStorage sStorage = FirebaseStorage.getInstance();
+
     public interface MessageLoadListener { public void onLoadComplete(); }
 
     public static void send(ChatMessage chatMessage) {
@@ -39,6 +51,7 @@ public class MessageUtil {
         public TextView messageTextView;
         public TextView messengerTextView;
         public CircleImageView messengerImageView;
+        public ImageView messageImageView;
 
         public MessageViewHolder(View v) {
             super(v);
@@ -46,6 +59,7 @@ public class MessageUtil {
             messengerTextView = (TextView) itemView.findViewById(R.id.messengerTextView);
             messengerImageView =
                     (CircleImageView) itemView.findViewById(R.id.messengerImageView);
+            messageImageView = (ImageView) itemView.findViewById(R.id.messageImageView);
         }
     }
 
@@ -87,6 +101,35 @@ public class MessageUtil {
                             .load(chatMessage.getPhotoUrl())
                             .into(target);
                 }
+                if (chatMessage.getImageUrl() != null) {
+                    //Set view visibilities for a image message
+                    viewHolder.messageImageView.setVisibility(View.VISIBLE);
+                    viewHolder.messageTextView.setVisibility(View.GONE);
+                    // load image for message
+                    try {
+                        final StorageReference gsReference =
+                                sStorage.getReferenceFromUrl(chatMessage.getImageUrl());
+                        gsReference.getDownloadUrl().addOnSuccessListener(new OnSuccessListener<Uri>() {
+                            @Override
+                            public void onSuccess(Uri uri) {
+                                Glide.with(activity)
+                                        .load(uri)
+                                        .into(viewHolder.messageImageView);
+                            }
+                        }).addOnFailureListener(new OnFailureListener() {
+                            @Override
+                            public void onFailure(@NonNull Exception exception) {
+                                Log.e(LOG_TAG, "Could not load image for message", exception);
+                            }
+                        });
+                    } catch (IllegalArgumentException e) {
+                        viewHolder.messageTextView.setText("Error loading image");
+                        Log.e(LOG_TAG, e.getMessage() + " : " + chatMessage.getImageUrl());
+                    }                } else {
+                    //Set view visibilities for a text message
+                    viewHolder.messageImageView.setVisibility(View.GONE);
+                    viewHolder.messageTextView.setVisibility(View.VISIBLE);
+                }
             }
         };
 
@@ -104,5 +147,12 @@ public class MessageUtil {
             }
         });
         return adapter;
+    }
+
+    public static StorageReference getImageStorageReference(FirebaseUser user, Uri uri) {
+        //Create a blob storage reference with path : bucket/userId/timeMs/filename
+        long nowMs = Calendar.getInstance().getTimeInMillis();
+        return sStorage.getReference().child(user.getUid() + "/" + nowMs + "/" + uri
+                .getLastPathSegment());
     }
 }
